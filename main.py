@@ -159,7 +159,15 @@ def main():
 
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Run model training based on specified model type')
+
     parser.add_argument('--model', type=str, required=True, help='Model type to train (e.g., BOW)')
+
+    parser.add_argument(
+    "--pretrained",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Use GloVe initialization instead of random embeddings"
+    )
 
     # Parse the command-line arguments
     args = parser.parse_args()
@@ -241,11 +249,7 @@ def main():
 
             # Train and evaluate DAN
             print('\nDAN layers:')
-            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(DAN(hidden_size=hidden_size_DAN, word_embeddings=word_embeddings), train_loader, test_loader)
-
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            print(f"Data loaded in : {elapsed_time} seconds")
+            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(DAN(hidden_size=hidden_size_DAN, word_embeddings=word_embeddings, pretrained=args.pretrained), train_loader, test_loader)
     
             # Plot the accuracy
             plt.figure(figsize=(8, 6))
@@ -258,7 +262,7 @@ def main():
             plt.grid()
     
             # Save the training accuracy figure
-            accuracy_file = 'DAN_accuracy.png'
+            accuracy_file = f'DAN_Accuracy_PT_{args.pretrained}.png'
             plt.savefig(accuracy_file)
             print(f"\n\n Accuracy plot saved as {accuracy_file}")
 
@@ -274,7 +278,7 @@ def main():
             plt.grid()
     
             # Save the training accuracy figure
-            loss_file = 'DAN_loss.png'
+            loss_file = f'DAN_Loss_PT_{args.pretrained}.png'
             plt.savefig(loss_file)
             print(f"\n\n Loss plot saved as {loss_file}")
     
@@ -283,3 +287,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# python main.py --model BOW
+# python main.py --model DAN --pretrained
+# python main.py --model DAN --no-pretrained

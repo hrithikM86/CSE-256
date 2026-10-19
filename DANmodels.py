@@ -14,10 +14,14 @@ epochs_DAN = 100
 embed_path = '/Users/hrithik/Desktop/UC San Diego/Courses/UCSD CSE 256/CSE256_PA1_FA26/data/glove.6B.50d-relativized.txt'
 
 class DAN(nn.Module):
-    def __init__(self, hidden_size, word_embeddings):
+    def __init__(self, hidden_size, word_embeddings, pretrained = True):
         super().__init__()
-        self.embeddings = word_embeddings.get_initialized_embedding_layer(frozen = True)
         input_size = word_embeddings.get_embedding_length()
+
+        if pretrained:
+            self.embeddings = word_embeddings.get_initialized_embedding_layer(frozen = True)
+        else:
+             self.embeddings = nn.Embedding(num_embeddings = len(word_embeddings.word_indexer),embedding_dim = input_size, padding_idx=0)
 
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size,hidden_size)
