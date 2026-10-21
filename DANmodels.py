@@ -7,27 +7,51 @@ from torch.utils.data import Dataset
 import numpy as np
 
 # DAN Paramaters
+embedding_dim_bpe = 50
 batch_size_DAN = 16
 hidden_size_DAN = 128
 lr_DAN = 0.0001
 epochs_DAN = 100
-embed_path = '/Users/hrithik/Desktop/UC San Diego/Courses/UCSD CSE 256/CSE256_PA1_FA26/data/glove.6B.50d-relativized.txt'
+embed_path = 'data/glove.6B.50d-relativized.txt'
 
 class DAN(nn.Module):
-    def __init__(self, hidden_size, word_embeddings, pretrained = True):
+    def __init__(
+        self,
+        hidden_size,
+        word_embeddings=None,
+        pretrained=True,
+        vocab_size=None,
+        embedding_dim=50
+    ):
         super().__init__()
-        input_size = word_embeddings.get_embedding_length()
-        print(f'Input size: {input_size}')
+
+        if word_embeddings is not None:
+            input_size = word_embeddings.get_embedding_length()
+            vocab_size = len(word_embeddings.word_indexer)
+        else:
+            input_size = embedding_dim
 
         if pretrained:
-            self.embeddings = word_embeddings.get_initialized_embedding_layer(frozen = True)
+            if word_embeddings is None:
+                raise ValueError("Pretrained mode requires word_embeddings")
+
+            self.embeddings = (
+                word_embeddings.get_initialized_embedding_layer(frozen=True)
+            )
         else:
-             self.embeddings = nn.Embedding(num_embeddings = len(word_embeddings.word_indexer),embedding_dim = input_size, padding_idx=0)
+            if vocab_size is None:
+                raise ValueError("Random embeddings require vocab_size")
+
+            self.embeddings = nn.Embedding(
+                num_embeddings=vocab_size,
+                embedding_dim=input_size,
+                padding_idx=0
+            )
 
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size,hidden_size)
-        self.fc3 = nn.Linear(hidden_size,2)
-        self.log_softmax = nn.LogSoftmax(dim = 1)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, 2)
+        self.log_softmax = nn.LogSoftmax(dim=1)
 
         
 
@@ -76,3 +100,34 @@ class SentimentDatasetDAN(Dataset):
             return self.word_indices[idx], self.labels[idx]
 
 
+class SentimentDatasetSubwordDAN(Dataset):
+    def __init__(self, infile, tokenizer, indexer):
+        self.examples = read_sentiment_examples(infile)
+        unk_index = indexer.index_of("UNK")
+
+        self.word_indices = []
+
+        for example in self.examples:
+            tokens = tokenizer.encode(example.words)
+
+            indices = [
+                indexer.index_of(token)
+                if indexer.contains(token)
+                else unk_index
+                for token in tokens
+            ]
+
+            self.word_indices.append(
+                torch.tensor(indices, dtype=torch.long)
+            )
+
+        self.labels = torch.tensor(
+            [example.label for example in self.examples],
+            dtype=torch.long
+        )
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, idx):
+        return self.word_indices[idx], self.labels[idx]

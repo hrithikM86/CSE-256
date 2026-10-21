@@ -15,6 +15,8 @@ from DANmodels import *
 from torch.nn.utils.rnn import pad_sequence
 import csv
 import os
+from BPEtokenizer import BPETokenizer
+
 
 
 def save_index_word_map(index_word_map):
@@ -25,9 +27,10 @@ def save_index_word_map(index_word_map):
         writer.writerow(["index", "word"])
         writer.writerows(sorted(index_word_map.items()))
 
-def save_dan_results(train_accuracy, dev_accuracy, train_loss, dev_loss, pretrained):
+def save_dan_results(train_accuracy, dev_accuracy, train_loss, dev_loss, pretrained, filename=None):
     os.makedirs("results", exist_ok=True)
-    filename = f"results/DAN_PT_{pretrained}.csv"
+    if filename is None:
+        filename = f"results/DAN_PT_{pretrained}.csv"
 
     with open(filename, "w", newline="") as file:
         writer = csv.writer(file)
@@ -77,6 +80,7 @@ def train_epoch(data_loader, model, loss_fn, optimizer):
 
 
 # Evaluation function BOW
+@torch.no_grad()
 def eval_epoch(data_loader, model, loss_fn, optimizer):
     size = len(data_loader.dataset)
     num_batches = len(data_loader)
@@ -123,6 +127,7 @@ def train_epoch_DAN(data_loader, model, loss_fn, optimizer):
     return accuracy, average_train_loss
 
 # Evaluation function DAN
+@torch.no_grad()
 def eval_epoch_DAN(data_loader, model, loss_fn, optimizer):
     size = len(data_loader.dataset)
     num_batches = len(data_loader)
@@ -203,8 +208,13 @@ def main():
     help="Use GloVe initialization instead of random embeddings"
     )
 
+    parser.add_argument("--num-merges", type=int, default=15000)
+
     # Parse the command-line arguments
     args = parser.parse_args()
+    if args.num_merges < 0:
+        parser.error("--num-merges must be nonnegative")
+    os.makedirs("figures", exist_ok=True)
 
     # Check if the model type is "BOW"
     if args.model == "BOW":
@@ -331,6 +341,87 @@ def main():
     
             # plt.show()
 
+    elif args.model in ("DAN_BPE", "SUBWORDDAN"):
+
+            # Data Loading
+            start_time = time.time()
+
+            tokenizer = BPETokenizer(
+                "data/train.txt", num_merges=args.num_merges
+            )
+
+            os.makedirs("mappings", exist_ok=True)
+            merges_file = f"mappings/BPE_merges_{args.num_merges}.json"
+            indexer_file = f"mappings/BPE_indexer_{args.num_merges}.json"
+
+            if os.path.exists(merges_file) and os.path.exists(indexer_file):
+                tokenizer.load_merges(merges_file)
+                indexer = tokenizer.load_indexer(indexer_file)
+            else:
+                tokenizer.tokenize()
+                indexer = tokenizer.build_subword_indexer()
+
+                tokenizer.save_merges(merges_file)
+                tokenizer.save_indexer(indexer_file)
+            print(f"Subword vocabulary size: {len(indexer)}")
+
+            train_data = SentimentDatasetSubwordDAN("data/train.txt", tokenizer, indexer)
+            dev_data = SentimentDatasetSubwordDAN("data/dev.txt", tokenizer, indexer)
+
+            train_loader = DataLoader(train_data, batch_size=batch_size_DAN, shuffle=True, collate_fn=collate_dan)
+            test_loader = DataLoader(dev_data, batch_size=batch_size_DAN, shuffle=False, collate_fn=collate_dan)
+
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"\nData loaded in : {elapsed_time} seconds")
+
+            start_time = time.time()
+
+            # Train and evaluate DAN
+            print('\nDAN BPE layers:')
+            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(DAN(hidden_size=hidden_size_DAN, pretrained=False, vocab_size=len(indexer), embedding_dim=embedding_dim_bpe), train_loader, test_loader)
+
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"\nModel Trained in : {elapsed_time} seconds")
+
+            # Save results as csv
+            save_dan_results(dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss, False,
+                             filename=f"results/DAN_BPE_Merges_{args.num_merges}.csv")
+    
+            # Plot the accuracy
+            plt.figure(figsize=(8, 6))
+            plt.plot(dan_train_accuracy, label='train')
+            plt.plot(dan_test_accuracy, label='test')
+            plt.xlabel('Epochs')
+            plt.ylabel('Accuracy')
+            plt.title('DAN BPE Epoch vs Accuracy')
+            plt.legend()
+            plt.grid()
+    
+            # Save the training accuracy figure
+            accuracy_file = f'figures/DAN_BPE_Accuracy_Merges_{args.num_merges}.png'
+            plt.savefig(accuracy_file)
+            print(f"\nAccuracy plot saved as {accuracy_file}")
+
+
+            # Plot the loss
+            plt.figure(figsize=(8, 6))
+            plt.plot(dan_train_loss, label='train')
+            plt.plot(dan_test_loss, label='test')
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.title('DAN BPE Epoch vs Loss')
+            plt.legend()
+            plt.grid()
+    
+            # Save the training accuracy figure
+            loss_file = f'figures/DAN_BPE_Loss_Merges_{args.num_merges}.png'
+            plt.savefig(loss_file)
+            print(f"\nLoss plot saved as {loss_file}")
+    
+            # plt.show()
+
 
 if __name__ == "__main__":
     main()
@@ -338,3 +429,4 @@ if __name__ == "__main__":
 # python main.py --model BOW
 # python main.py --model DAN --pretrained
 # python main.py --model DAN --no-pretrained
+# python main.py --model DAN_BPE --num-merges 15000
