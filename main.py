@@ -13,6 +13,36 @@ from torch.utils.data import DataLoader
 from BOWmodels import SentimentDatasetBOW, NN2BOW, NN3BOW
 from DANmodels import *
 from torch.nn.utils.rnn import pad_sequence
+import csv
+import os
+
+
+def save_index_word_map(index_word_map):
+    os.makedirs("mappings", exist_ok=True)
+
+    with open("mappings/index_word_map.csv", "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["index", "word"])
+        writer.writerows(sorted(index_word_map.items()))
+
+def save_dan_results(train_accuracy, dev_accuracy, train_loss, dev_loss, pretrained):
+    os.makedirs("results", exist_ok=True)
+    filename = f"results/DAN_PT_{pretrained}.csv"
+
+    with open(filename, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            "epoch", "train_accuracy", "dev_accuracy", "train_loss", "dev_loss"
+        ])
+        writer.writerows(zip(
+            range(1, len(train_accuracy) + 1),
+            train_accuracy,
+            dev_accuracy,
+            train_loss,
+            dev_loss
+        ))
+
+    print(f"\nResults saved as {filename}")
 
 def collate_dan(batch):
     sentences, labels = zip(*batch)
@@ -133,6 +163,10 @@ def experiment(model, train_loader, test_loader):
     return all_train_accuracy, all_test_accuracy
 
 def experiment_DAN(model, train_loader, test_loader):
+
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"Number of paramaters in DAN: {num_params}")
+
     loss_fn = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_DAN)
 
@@ -207,7 +241,7 @@ def main():
         plt.grid()
 
         # Save the training accuracy figure
-        training_accuracy_file = 'train_accuracy.png'
+        training_accuracy_file = 'figures/train_accuracy.png'
         plt.savefig(training_accuracy_file)
         print(f"\n\nTraining accuracy plot saved as {training_accuracy_file}")
 
@@ -222,7 +256,7 @@ def main():
         plt.grid()
 
         # Save the testing accuracy figure
-        testing_accuracy_file = 'dev_accuracy.png'
+        testing_accuracy_file = 'figures/dev_accuracy.png'
         plt.savefig(testing_accuracy_file)
         print(f"Dev accuracy plot saved as {testing_accuracy_file}\n\n")
 
@@ -236,6 +270,9 @@ def main():
             word_embeddings = read_word_embeddings(embeddings_file=embed_path)
             # word_indexer and vectors
 
+            # # Saving index:word mapping
+            # save_index_word_map(word_embeddings.word_indexer.ints_to_objs)
+
             train_data = SentimentDatasetDAN("data/train.txt", word_embeddings=word_embeddings)
             dev_data = SentimentDatasetDAN("data/dev.txt", word_embeddings=word_embeddings)
             # we are returning inices of the words
@@ -245,11 +282,21 @@ def main():
 
             end_time = time.time()
             elapsed_time = end_time - start_time
-            print(f"Data loaded in : {elapsed_time} seconds")
+            print(f"\nData loaded in : {elapsed_time} seconds")
+
+            start_time = time.time()
 
             # Train and evaluate DAN
             print('\nDAN layers:')
             dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(DAN(hidden_size=hidden_size_DAN, word_embeddings=word_embeddings, pretrained=args.pretrained), train_loader, test_loader)
+
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"\nModel Trained in : {elapsed_time} seconds")
+
+            # Save results as csv
+            save_dan_results(dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss, args.pretrained
+            )
     
             # Plot the accuracy
             plt.figure(figsize=(8, 6))
@@ -262,9 +309,9 @@ def main():
             plt.grid()
     
             # Save the training accuracy figure
-            accuracy_file = f'DAN_Accuracy_PT_{args.pretrained}.png'
+            accuracy_file = f'figures/DAN_Accuracy_PT_{args.pretrained}.png'
             plt.savefig(accuracy_file)
-            print(f"\n\n Accuracy plot saved as {accuracy_file}")
+            print(f"\nAccuracy plot saved as {accuracy_file}")
 
 
             # Plot the loss
@@ -278,9 +325,9 @@ def main():
             plt.grid()
     
             # Save the training accuracy figure
-            loss_file = f'DAN_Loss_PT_{args.pretrained}.png'
+            loss_file = f'figures/DAN_Loss_PT_{args.pretrained}.png'
             plt.savefig(loss_file)
-            print(f"\n\n Loss plot saved as {loss_file}")
+            print(f"\nLoss plot saved as {loss_file}")
     
             # plt.show()
 

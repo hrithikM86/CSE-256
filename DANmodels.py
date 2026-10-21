@@ -17,6 +17,7 @@ class DAN(nn.Module):
     def __init__(self, hidden_size, word_embeddings, pretrained = True):
         super().__init__()
         input_size = word_embeddings.get_embedding_length()
+        print(f'Input size: {input_size}')
 
         if pretrained:
             self.embeddings = word_embeddings.get_initialized_embedding_layer(frozen = True)

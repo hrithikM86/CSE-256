@@ -1,0 +1,4 @@
+1. PCA compaing the embeddings
+2. Train test graph for everything - Done
+3. Accuracy graph for everything - Done
+4. Model params vs Training Time - Done
