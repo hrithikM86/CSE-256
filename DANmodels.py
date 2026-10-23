@@ -7,9 +7,9 @@ from torch.utils.data import Dataset
 import numpy as np
 
 # DAN Paramaters
-embedding_dim_bpe = 50
+embedding_dim_bpe = 300
 batch_size_DAN = 16
-hidden_size_DAN = 100
+hidden_size_DAN = 8
 lr_DAN = 0.0001
 epochs_DAN = 100
 embed_path = 'data/glove.6B.300d-relativized.txt'
@@ -49,24 +49,12 @@ class DAN(nn.Module):
             )
 
 
-        # def hidden_block(in_features, out_features):
-        #     return nn.Sequential(
-        #         nn.Linear(in_features, out_features),
-        #         nn.LayerNorm(out_features),
-        #         nn.ReLU(),
-        #         nn.Dropout(p=0.3)
-        #     )
-
-        # self.layer1 = hidden_block(input_size, hidden_size)
-        # self.layer2 = hidden_block(hidden_size, hidden_size)
-        # self.layer3 = hidden_block(hidden_size, hidden_size)
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        # self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, 2)
         self.dropout = nn.Dropout(p = 0.5)
         self.log_softmax = nn.LogSoftmax(dim=1)
-        
-
+            
         
 
     def forward(self, x):
@@ -77,7 +65,7 @@ class DAN(nn.Module):
         x = x / lengths
 
         x = F.relu(self.fc1(x))
-        # x = self.dropout(x)
+        x = self.dropout(x)
         # x = F.relu(self.fc2(x)) 
         # x = self.dropout(x)
         x = self.fc3(x)

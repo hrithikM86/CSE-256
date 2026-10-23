@@ -167,7 +167,13 @@ def experiment(model, train_loader, test_loader):
     
     return all_train_accuracy, all_test_accuracy
 
-def experiment_DAN(model, train_loader, test_loader):
+def experiment_DAN(
+    model,
+    train_loader,
+    test_loader,
+    checkpoint_file="checkpoints/DAN_best.pt"
+):
+    os.makedirs(os.path.dirname(checkpoint_file) or ".", exist_ok=True)
 
     num_params = sum(p.numel() for p in model.parameters())
     print(f"Number of paramaters in DAN: {num_params}")
@@ -179,18 +185,53 @@ def experiment_DAN(model, train_loader, test_loader):
     all_test_accuracy = []
     all_train_loss = []
     all_test_loss = []
+    best_dev_accuracy = -1.0
+
     for epoch in range(epochs_DAN):
-        train_accuracy, train_loss = train_epoch_DAN(train_loader, model, loss_fn, optimizer)
+        train_accuracy, train_loss = train_epoch_DAN(
+            train_loader, model, loss_fn, optimizer
+        )
         all_train_accuracy.append(train_accuracy)
         all_train_loss.append(train_loss)
 
-        test_accuracy, test_loss = eval_epoch_DAN(test_loader, model, loss_fn, optimizer)
+        test_accuracy, test_loss = eval_epoch_DAN(
+            test_loader, model, loss_fn, optimizer
+        )
         all_test_accuracy.append(test_accuracy)
         all_test_loss.append(test_loss)
 
+        if test_accuracy > best_dev_accuracy:
+            best_dev_accuracy = test_accuracy
+
+            torch.save(
+                {
+                    "epoch": epoch + 1,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "dev_accuracy": test_accuracy,
+                    "dev_loss": test_loss
+                },
+                checkpoint_file
+            )
+
         if epoch % 10 == 9:
             print(f'Epoch #{epoch + 1}: train accuracy {train_accuracy:.3f}, dev accuracy {test_accuracy:.3f}, train loss {train_loss:.3f}, dev loss {test_loss:.3f}')
-    
+
+    checkpoint = torch.load(
+        checkpoint_file,
+        map_location=next(model.parameters()).device,
+        weights_only=True
+    )
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+
+    print(
+        f"\nBest model saved as {checkpoint_file}"
+        f"\nEpoch: {checkpoint['epoch']}, "
+        f"dev accuracy: {checkpoint['dev_accuracy']:.3f}, "
+        f"dev loss: {checkpoint['dev_loss']:.3f}"
+    )
+
     return all_train_accuracy, all_test_accuracy, all_train_loss, all_test_loss
 
 
@@ -298,7 +339,16 @@ def main():
 
             # Train and evaluate DAN
             print('\nDAN layers:')
-            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(DAN(hidden_size=hidden_size_DAN, word_embeddings=word_embeddings, pretrained=args.pretrained), train_loader, test_loader)
+            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(
+                DAN(
+                    hidden_size=hidden_size_DAN,
+                    word_embeddings=word_embeddings,
+                    pretrained=args.pretrained
+                ),
+                train_loader,
+                test_loader,
+                checkpoint_file=f"checkpoints/DAN_PT_{args.pretrained}_best.pt"
+            )
 
             end_time = time.time()
             elapsed_time = end_time - start_time
@@ -378,8 +428,19 @@ def main():
             start_time = time.time()
 
             # Train and evaluate DAN
+            # Train and evaluate DAN
             print('\nDAN BPE layers:')
-            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(DAN(hidden_size=hidden_size_DAN, pretrained=False, vocab_size=len(indexer), embedding_dim=embedding_dim_bpe), train_loader, test_loader)
+            dan_train_accuracy, dan_test_accuracy, dan_train_loss, dan_test_loss = experiment_DAN(
+                DAN(
+                    hidden_size=hidden_size_DAN,
+                    pretrained=False,
+                    vocab_size=len(indexer),
+                    embedding_dim=embedding_dim_bpe
+                ),
+                train_loader,
+                test_loader,
+                checkpoint_file=f"checkpoints/DAN_BPE_Merges_{args.num_merges}_best.pt"
+            )
 
             end_time = time.time()
             elapsed_time = end_time - start_time
